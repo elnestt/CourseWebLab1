@@ -1,28 +1,56 @@
-import { gameLogModel } from '../models/gameLogModel.js';
-import { AppError } from '../utils/AppError.js';
+import {
+  findAllGameLogs,
+  findGameLogById,
+  createGameLogRecord,
+  updateGameLogRecord,
+  deleteGameLogRecord,
+} from '../models/gameLogModel.js';
 
-export async function getAllGameLogs(_req, res) {
-  const logs = await gameLogModel.findAll();
-  res.json({ data: logs });
+export async function getGameLogs(req, res) {
+  const result = await findAllGameLogs(req.query);
+  res.json(result);
 }
 
 export async function getGameLogById(req, res) {
-  const log = await gameLogModel.findById(req.validated.params.id);
-  if (!log) throw new AppError('Запис у щоденнику не знайдено', 404);
+  const log = await findGameLogById(Number(req.params.id));
+  if (!log) {
+    return res.status(404).json({ error: 'Запис у щоденнику не знайдено' });
+  }
   res.json({ data: log });
 }
 
 export async function createGameLog(req, res) {
-  const log = await gameLogModel.create(req.validated.body);
+  const userId = req.user?.userId ?? req.body.userId;
+  const log = await createGameLogRecord({ ...req.body, userId });
   res.status(201).json({ message: 'Гру додано до щоденника', data: log });
 }
 
 export async function updateGameLog(req, res) {
-  const log = await gameLogModel.update(req.validated.params.id, req.validated.body);
-  res.json({ message: 'Статус гри оновлено', data: log });
+  const id = Number(req.params.id);
+  const existing = await findGameLogById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Запис у щоденнику не знайдено' });
+  }
+
+  if (req.user && existing.userId !== req.user.userId && req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Недостатньо прав для редагування цього запису' });
+  }
+
+  const log = await updateGameLogRecord(id, req.body);
+  res.json({ message: 'Запис у щоденнику оновлено', data: log });
 }
 
 export async function deleteGameLog(req, res) {
-  await gameLogModel.remove(req.validated.params.id);
+  const id = Number(req.params.id);
+  const existing = await findGameLogById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Запис у щоденнику не знайдено' });
+  }
+
+  if (req.user && existing.userId !== req.user.userId && req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Недостатньо прав для видалення цього запису' });
+  }
+
+  await deleteGameLogRecord(id);
   res.status(204).end();
 }

@@ -1,28 +1,58 @@
-import { genreModel } from '../models/genreModel.js';
-import { AppError } from '../utils/AppError.js';
+import {
+  findAllGenres,
+  findGenreById,
+  createGenreRecord,
+  updateGenreRecord,
+  deleteGenreRecord,
+} from '../models/genreModel.js';
+import { logAudit } from '../utils/audit.js';
 
-export async function getAllGenres(_req, res) {
-  const genres = await genreModel.findAll();
-  res.json({ data: genres });
+export async function getGenres(req, res) {
+  const result = await findAllGenres(req.query);
+  res.json(result);
 }
 
 export async function getGenreById(req, res) {
-  const genre = await genreModel.findById(req.validated.params.id);
-  if (!genre) throw new AppError('Жанр не знайдено', 404);
+  const genre = await findGenreById(Number(req.params.id));
+  if (!genre) {
+    return res.status(404).json({ error: 'Жанр не знайдено' });
+  }
   res.json({ data: genre });
 }
 
 export async function createGenre(req, res) {
-  const genre = await genreModel.create(req.validated.body);
+  const genre = await createGenreRecord(req.body);
+
+  await logAudit({
+    userId: req.user?.userId,
+    action: 'GENRE_CREATED',
+    entity: 'Genre',
+    entityId: genre.id,
+    details: { name: genre.name },
+    req,
+  });
+
   res.status(201).json({ message: 'Жанр створено', data: genre });
 }
 
 export async function updateGenre(req, res) {
-  const genre = await genreModel.update(req.validated.params.id, req.validated.body);
+  const id = Number(req.params.id);
+  const existing = await findGenreById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Жанр не знайдено' });
+  }
+
+  const genre = await updateGenreRecord(id, req.body);
   res.json({ message: 'Жанр оновлено', data: genre });
 }
 
 export async function deleteGenre(req, res) {
-  await genreModel.remove(req.validated.params.id);
+  const id = Number(req.params.id);
+  const existing = await findGenreById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Жанр не знайдено' });
+  }
+
+  await deleteGenreRecord(id);
   res.status(204).end();
 }

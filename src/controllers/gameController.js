@@ -1,28 +1,77 @@
-import { gameModel } from '../models/gameModel.js';
-import { AppError } from '../utils/AppError.js';
+import {
+  findAllGames,
+  findGameById,
+  createGameRecord,
+  updateGameRecord,
+  deleteGameRecord,
+} from '../models/gameModel.js';
+import { logAudit } from '../utils/audit.js';
 
-export async function getAllGames(_req, res) {
-  const games = await gameModel.findAll();
-  res.json({ data: games });
+export async function getGames(req, res) {
+  const result = await findAllGames(req.query);
+  res.json(result);
 }
 
 export async function getGameById(req, res) {
-  const game = await gameModel.findById(req.validated.params.id);
-  if (!game) throw new AppError('Гру не знайдено', 404);
+  const game = await findGameById(Number(req.params.id));
+  if (!game) {
+    return res.status(404).json({ error: 'Гру не знайдено' });
+  }
   res.json({ data: game });
 }
 
 export async function createGame(req, res) {
-  const game = await gameModel.create(req.validated.body);
-  res.status(201).json({ message: 'Гру додано до каталогу', data: game });
+  const game = await createGameRecord(req.body);
+
+  await logAudit({
+    userId: req.user?.userId,
+    action: 'GAME_CREATED',
+    entity: 'Game',
+    entityId: game.id,
+    details: { title: game.title },
+    req,
+  });
+
+  res.status(201).json({ message: 'Гру успішно додано', data: game });
 }
 
 export async function updateGame(req, res) {
-  const game = await gameModel.update(req.validated.params.id, req.validated.body);
+  const id = Number(req.params.id);
+  const existing = await findGameById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Гру не знайдено' });
+  }
+
+  const game = await updateGameRecord(id, req.body);
+
+  await logAudit({
+    userId: req.user?.userId,
+    action: 'GAME_UPDATED',
+    entity: 'Game',
+    entityId: game.id,
+    req,
+  });
+
   res.json({ message: 'Дані гри оновлено', data: game });
 }
 
 export async function deleteGame(req, res) {
-  await gameModel.remove(req.validated.params.id);
+  const id = Number(req.params.id);
+  const existing = await findGameById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Гру не знайдено' });
+  }
+
+  await deleteGameRecord(id);
+
+  await logAudit({
+    userId: req.user?.userId,
+    action: 'GAME_DELETED',
+    entity: 'Game',
+    entityId: id,
+    details: { title: existing.title },
+    req,
+  });
+
   res.status(204).end();
 }

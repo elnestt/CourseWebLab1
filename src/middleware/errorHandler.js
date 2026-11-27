@@ -1,34 +1,32 @@
-import { AppError } from '../utils/AppError.js';
-
-export function notFoundHandler(req, _res, next) {
-  next(new AppError(`Маршрут ${req.method} ${req.originalUrl} не знайдено`, 404));
-}
-
 export function errorHandler(err, _req, res, _next) {
-  if (err instanceof AppError) {
-    return res.status(err.statusCode).json({
-      error: err.message,
-      ...(err.details ? { details: err.details } : {}),
-    });
+  if (err.name === 'MulterError') {
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? 'Файл занадто великий'
+        : err.code === 'LIMIT_UNEXPECTED_FILE'
+          ? 'Перевищено ліміт кількості файлів або некоректне поле'
+          : 'Помилка завантаження файлу';
+    return res.status(400).json({ error: message });
   }
 
   if (err.code === 'P2002') {
-    const target = err.meta?.target?.join(', ') || 'поле';
-    return res.status(409).json({ error: `Запис із таким значенням (${target}) вже існує` });
+    return res.status(409).json({ error: 'Запис із такими унікальними даними вже існує' });
   }
 
   if (err.code === 'P2025') {
-    return res.status(404).json({ error: 'Запитуваний запис не знайдено в базі даних' });
+    return res.status(404).json({ error: 'Запис не знайдено' });
   }
 
   if (err.code === 'P2003') {
-    return res.status(400).json({ error: 'Порушення цілісності зв’язків (невірний ID пов’язаної сутності)' });
+    return res.status(400).json({ error: 'Порушення зв’язку зовнішнього ключа в базі даних' });
   }
 
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({ error: 'Некоректний формат JSON у тілі запиту' });
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) {
+    console.error(err);
   }
 
-  console.error('Непередбачена помилка сервера:', err);
-  res.status(500).json({ error: 'Внутрішня помилка сервера' });
+  res.status(status).json({
+    error: status >= 500 ? 'Внутрішня помилка сервера' : err.message,
+  });
 }
