@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum PlayStatus {
+  PLAYING
+  COMPLETED
+  BACKLOG
+  DROPPED
+  WISHLIST
+}
+
+model User {
+  id          Int          @id @default(autoincrement())
+  email       String       @unique
+  password    String
+  username    String       @unique
+  bio         String?
+  avatar      String?
+  role        Role         @default(USER)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  gameLogs    GameLog[]
+  reviews     Review[]
+  collections Collection[]
+}
+
+model Genre {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  games       Game[]
+}
+
+model Game {
+  id              Int              @id @default(autoincrement())
+  title           String
+  slug            String           @unique
+  developer       String
+  releaseYear     Int
+  coverUrl        String?
+  description     String?
+  systemReqs      Json?
+  genreId         Int
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  genre           Genre            @relation(fields: [genreId], references: [id], onDelete: Restrict)
+  logs            GameLog[]
+  reviews         Review[]
+  collectionItems CollectionItem[]
+
+  @@index([genreId])
+}
+
+model GameLog {
+  id              Int        @id @default(autoincrement())
+  status          PlayStatus @default(BACKLOG)
+  rating          Decimal?   @db.Decimal(3, 1)
+  hoursPlayed     Int        @default(0)
+  platform        String     @default("PC")
+  optimizationTag String?
+  completedAt     DateTime?
+  userId          Int
+  gameId          Int
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game            Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([userId])
+  @@index([gameId])
+}
+
+model Review {
+  id               Int      @id @default(autoincrement())
+  title            String
+  content          String
+  rating           Decimal  @db.Decimal(3, 1)
+  containsSpoilers Boolean  @default(false)
+  likesCount       Int      @default(0)
+  userId           Int
+  gameId           Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game             Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([gameId])
+}
+
+model Collection {
+  id          Int              @id @default(autoincrement())
+  title       String
+  description String?
+  isPublic    Boolean          @default(true)
+  userId      Int
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       CollectionItem[]
+
+  @@index([userId])
+}
+
+model CollectionItem {
+  id           Int        @id @default(autoincrement())
+  collectionId Int
+  gameId       Int
+  note         String?
+  orderIndex   Int        @default(0)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  game         Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, gameId])
+}
