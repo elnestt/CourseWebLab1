@@ -1,144 +1,48 @@
-# Звіт з лабораторної роботи 1
+# Документація REST API — Game Tracker
 
-## Тема роботи: Розроблення backend архітектури та основного функціоналу
+Базовий URL: `http://localhost:3000/api`  
+Формат даних: `application/json`
 
-Здобувач освіти: Скопін Денис  
-Група: ІПЗ-41  
-GitHub репозиторій: https://github.com/elnest/game-tracker-api
+## Службовий маршрут
+- `GET /health` — перевірка стану сервера (`200 OK`).
 
-## Виконання роботи
+## 1. Жанри (`/api/genres`)
+- `GET /api/genres` — отримати список усіх жанрів із кількістю ігор.
+- `GET /api/genres/:id` — отримати жанр за ID разом зі списком ігор.
+- `POST /api/genres` — створити новий жанр (`201 Created`).
+  - Body: `{ "name": "Metroidvania", "slug": "metroidvania", "description": "..." }`
+- `PUT /api/genres/:id` — оновити дані жанру (`200 OK`).
+- `DELETE /api/genres/:id` — видалити жанр (`204 No Content`).
 
-### Налаштування проєкту
-- Створено локальний Git-репозиторій, налаштовано `.gitignore` (виключено `node_modules/`, `.env`, `src/generated/`) та підключено віддалений репозиторій на GitHub.
-- Ініціалізовано Node.js проєкт (`npm init -y`) з підтримкою ES-модулів (`"type": "module"`).
-- Встановлено необхідні залежності: `express` (v5), `@prisma/client` (v7), `@prisma/adapter-pg`, `pg`, `dotenv`, `zod` та `prisma` (devDependency).
-- Налаштовано змінну середовища `DATABASE_URL` та конфігурацію порту у файлі `.env`.
-- Організовано шарувату структуру директорій проєкту (`src/controllers/`, `src/models/`, `src/routes/`, `src/schemas/`, `src/middleware/`, `src/utils/`, `prisma/`, `docs/`, `reports/`).
+## 2. Каталог ігор (`/api/games`)
+- `GET /api/games` — отримати каталог ігор із жанрами та лічильниками записів.
+- `GET /api/games/:id` — отримати детальну картку гри з рецензіями.
+- `POST /api/games` — додати нову гру (`201 Created`).
+  - Body: `{ "title": "Dark Souls II", "slug": "dark-souls-2", "developer": "FromSoftware", "releaseYear": 2014, "genreId": 1 }`
+- `PUT /api/games/:id` — оновити інформацію про гру (`200 OK`).
+- `DELETE /api/games/:id` — видалити гру (`204 No Content`).
 
-### База даних
-- У середовищі **PostgreSQL 19** (через pgAdmin 4) створено реляційну базу даних `game_tracker_db`.
-- У файлі `prisma/schema.prisma` спроєктовано 7 взаємопов'язаних моделей для предметної області вебсервісу обліку проходження відеоігор (**Game Tracker**):
-  - `User` — облікові записи користувачів із ролями (`USER`, `MODERATOR`, `ADMIN`);
-  - `Genre` — довідник жанрів відеоігор (зв'язок `1:N` із таблицею `Game`);
-  - `Game` — каталог відеоігор із метаданими та системними вимогами у форматі `JSON`;
-  - `GameLog` — особистий щоденник гравця зі статусами проходження (`PLAYING`, `COMPLETED`, `BACKLOG`, `DROPPED`, `WISHLIST`), оцінкою, кількістю годин, платформою та тегом оптимізації;
-  - `Review` — рецензії користувачів на ігри з оцінкою та позначкою спойлерів;
-  - `Collection` та `CollectionItem` — користувацькі добірки ігор (зв'язок `N:M` через проміжну таблицю).
-- Виконано первинну міграцію бази даних (`npx prisma migrate dev --name init-game-tracker`), згенеровано Prisma Client та заповнено БД початковими тестовими даними через скрипт `prisma/seed.js` (`npm run db:seed`).
+## 3. Щоденник проходжень (`/api/logs`)
+- `GET /api/logs` — отримати всі записи ігрового щоденника.
+- `GET /api/logs/:id` — отримати конкретний запис за ID.
+- `POST /api/logs` — додати гру до щоденника користувача (`201 Created`).
+  - Body: `{ "userId": 1, "gameId": 1, "status": "PLAYING", "hoursPlayed": 24, "platform": "PC", "optimizationTag": "60 FPS High" }`
+  - Доступні статуси: `PLAYING`, `COMPLETED`, `BACKLOG`, `DROPPED`, `WISHLIST`.
+- `PUT /api/logs/:id` — оновити статус, оцінку (`0–10`) або награні години (`200 OK`).
+- `DELETE /api/logs/:id` — видалити запис із щоденника (`204 No Content`).
 
-### Backend архітектура
-- У файлі `src/app.js` реалізовано основний HTTP-сервер на базі **Express 5** із парсингом JSON-тіла запитів (`express.json({ limit: '1mb' })`), службовим маршрутом `/health` та підключенням API-роутера під префіксом `/api`.
-- Реалізовано архітектуру з чітким розділенням відповідальності (MVC + шар валідації):
-  - **Models** (`src/models/`) — інкапсулюють запити до PostgreSQL через Prisma ORM (включно зі зв'язками `include` та підрахунком `_count`);
-  - **Controllers** (`src/controllers/`) — обробляють HTTP-запити, викликають методи моделей та повертають стандартизовані JSON-відповіді зі статус-кодами `200`, `201`, `204`;
-  - **Routes** (`src/routes/`) — описують RESTful-ендпоінти та підключають проміжну валідацію.
-- Впроваджено middleware:
-  - `validate.js` — перевірка вхідних даних (`body`, `params`, `query`) за допомогою схем **Zod** із поверненням деталізованої помилки `400 Bad Request`;
-  - `errorHandler.js` та клас `AppError.js` — централізована обробка операційних помилок, неіснуючих маршрутів (`404 Not Found`) та специфічних кодів винятків Prisma (`P2002` → `409 Conflict`, `P2025` → `404 Not Found`, `P2003` → `400 Bad Request`).
+## 4. Рецензії (`/api/reviews`)
+- `GET /api/reviews` — отримати всі рецензії користувачів.
+- `GET /api/reviews/:id` — отримати рецензію за ID.
+- `POST /api/reviews` — опублікувати рецензію (`201 Created`).
+  - Body: `{ "userId": 1, "gameId": 1, "title": "Чудовий арт-дизайн", "content": "Детальний розбір бойової системи...", "rating": 9.4, "containsSpoilers": false }`
+- `PUT /api/reviews/:id` — відредагувати рецензію (`200 OK`).
+- `DELETE /api/reviews/:id` — видалити рецензію (`204 No Content`).
 
-### API endpoints
-Реалізовано та протестовано 4 групи RESTful-ендпоінтів (детальний опис наведено у файлі `docs/api.md`):
-
-- **Службовий маршрут:**
-  - `GET /health` — перевірка працездатності сервера.
-- **Жанри (`/api/genres`):**
-  - `GET /api/genres` — отримання списку всіх жанрів із кількістю ігор;
-  - `GET /api/genres/:id` — отримання жанру за ID разом зі списком ігор;
-  - `POST /api/genres` — створення нового жанру;
-  - `PUT /api/genres/:id` — оновлення даних жанру;
-  - `DELETE /api/genres/:id` — видалення жанру.
-- **Каталог ігор (`/api/games`):**
-  - `GET /api/games` — отримання каталогу ігор із жанрами та статистикою записів;
-  - `GET /api/games/:id` — отримання детальної інформації про гру та її рецензій;
-  - `POST /api/games` — додавання нової гри до каталогу;
-  - `PUT /api/games/:id` — оновлення інформації про гру;
-  - `DELETE /api/games/:id` — видалення гри.
-- **Щоденник проходжень (`/api/logs`):**
-  - `GET /api/logs` — отримання всіх записів ігрового щоденника;
-  - `GET /api/logs/:id` — отримання запису щоденника за ID;
-  - `POST /api/logs` — додавання гри до щоденника користувача;
-  - `PUT /api/logs/:id` — оновлення статусу проходження, оцінки (`0–10`) та награних годин;
-  - `DELETE /api/logs/:id` — видалення запису зі щоденника.
-- **Рецензії (`/api/reviews`):**
-  - `GET /api/reviews` — отримання списку всіх рецензій;
-  - `GET /api/reviews/:id` — отримання рецензії за ID;
-  - `POST /api/reviews` — публікація нової рецензії на гру;
-  - `PUT /api/reviews/:id` — редагування рецензії;
-  - `DELETE /api/reviews/:id` — видалення рецензії.
-
-## Структура проєкту
-
-```text
-game-tracker-api/
-├── docs/
-│   └── api.md
-├── prisma/
-│   ├── migrations/
-│   ├── schema.prisma
-│   └── seed.js
-├── reports/
-│   ├── 01-structure-prisma.png
-│   ├── 02-pgadmin-tables.png
-│   ├── 03-get-games.png
-│   ├── 04-crud-validation.png
-│   ├── 05-genres-reviews.png
-│   └── lab1-report.md
-├── src/
-│   ├── controllers/
-│   │   ├── gameController.js
-│   │   ├── gameLogController.js
-│   │   ├── genreController.js
-│   │   └── reviewController.js
-│   ├── middleware/
-│   │   ├── errorHandler.js
-│   │   └── validate.js
-│   ├── models/
-│   │   ├── gameLogModel.js
-│   │   ├── gameModel.js
-│   │   ├── genreModel.js
-│   │   └── reviewModel.js
-│   ├── routes/
-│   │   ├── gameLogRoutes.js
-│   │   ├── gameRoutes.js
-│   │   ├── genreRoutes.js
-│   │   ├── index.js
-│   │   └── reviewRoutes.js
-│   ├── schemas/
-│   │   ├── game.schema.js
-│   │   ├── gameLog.schema.js
-│   │   ├── genre.schema.js
-│   │   └── review.schema.js
-│   ├── utils/
-│   │   └── AppError.js
-│   ├── app.js
-│   └── db.js
-├── .env
-├── .gitignore
-├── package.json
-├── prisma.config.ts
-└── README.md
-```
-
-## Скріншоти тестування
-
-## Скріншоти тестування
-
-1. **Структура директорій та файлів проєкту у VS Code:**
-   ![Структура проєкту](./1.jpg)
-
-2. **Створені таблиці та дані в PostgreSQL (pgAdmin 4):**
-   ![Таблиці бази даних у pgAdmin 4](./2.jpg)
-
-3. **Отримання списку ігор (`GET /api/games` → `200 OK`):**
-   ![GET запит каталогу ігор](./3.jpg)
-
-4. **Тестування CRUD-операцій (`POST`, `PUT`, `DELETE`) та валідації Zod (`400 Bad Request`):**
-   ![Тестування CRUD та валідації](./4.jpg)
-
-5. **Перевірка маршрутів жанрів та рецензій (`/api/genres`, `/api/reviews`):**
-   ![Тестування жанрів та рецензій](./5.jpg)
-## Висновки
-
-Самооцінка: 5
-
-Обгрунтування: Усі технічні завдання лабораторної роботи виконано в повному обсязі. Спроєктовано реляційну базу даних із 7 взаємопов'язаними сутностями у PostgreSQL за допомогою Prisma ORM 7, реалізовано шарувату backend-архітектуру на Express 5, створено повний набір CRUD-маршрутів для 4 ресурсів, впроваджено сувору валідацію вхідних даних через Zod і централізовану обробку помилок, а також підготовлено документацію API та протестовано всі ендпоінти.
+## Коди відповідей та помилок
+- `200 OK` — успішне отримання або оновлення даних.
+- `201 Created` — ресурс успішно створено.
+- `204 No Content` — ресурс успішно видалено.
+- `400 Bad Request` — помилка валідації вхідних даних (Zod) або порушення цілісності зв’язків БД.
+- `404 Not Found` — маршрут або запис у базі даних не знайдено.
+- `409 Conflict` — дублювання унікального значення (`slug`, `email` або повторний запис гри у щоденнику).
