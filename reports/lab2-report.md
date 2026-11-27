@@ -4,7 +4,7 @@
 
 Здобувач освіти: Скопін Денис  
 Група: ІПЗ-41  
-GitHub репозиторій: https://github.com/elnestt/CourseWebLab2
+GitHub репозиторій: https://github.com/elnestt/CourseWebLab1
 
 ## Виконання роботи
 
@@ -40,12 +40,12 @@ GitHub репозиторій: https://github.com/elnestt/CourseWebLab2
 
 ### Документація Swagger та тестування
 - Налаштовано автоматичну генерацію документації OpenAPI 3.0 за допомогою `swagger-jsdoc` і `swagger-ui-express` на маршруті `/api-docs` із підтримкою авторизації через JWT (`bearerAuth`).
-- Написано набір інтеграційних тестів (`tests/auth.test.js`) із використанням `node:test` та `supertest` (13 тестів), що перевіряють реєстрацію, вхід, ротацію refresh-токенів, відновлення пароля, RBAC-обмеження, пошук із пагінацією, аудит дій та завантаження/валідацію/видалення файлів.
+- Написано набір інтеграційних тестів (`tests/auth.test.js`) із використанням `node:test` та `supertest` (12 тестів), що перевіряють реєстрацію, вхід, ротацію refresh-токенів, відновлення пароля, RBAC-обмеження, пошук із пагінацією, аудит дій та завантаження/валідацію/видалення файлів.
 
 ## Структура проєкту
 
 ```text
-CourseWebLab2/
+CourseWebLab1/
 ├── docs/
 │   └── api.md
 ├── prisma/
@@ -53,11 +53,17 @@ CourseWebLab2/
 │   ├── schema.prisma
 │   └── seed.js
 ├── reports/
-│   ├── lab2-1.png
-│   ├── lab2-2.png
-│   ├── lab2-3.png
-│   ├── lab2-4.png
-│   ├── lab2-5.png
+│   ├── 1.jpg
+│   ├── 2.jpg
+│   ├── 3.jpg
+│   ├── 4.jpg
+│   ├── 5.jpg
+│   ├── lab1-report.md
+│   ├── 2.1.jpg
+│   ├── 2.2.jpg
+│   ├── 2.3.jpg
+│   ├── 2.4.jpg
+│   ├── 2.5.jpg
 │   └── lab2-report.md
 ├── src/
 │   ├── config/
