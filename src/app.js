@@ -6,8 +6,12 @@ import swaggerUi from 'swagger-ui-express';
 import { swaggerSpecs } from './config/swagger.js';
 import apiRouter from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { metrics } from './utils/metrics.js';
 
 const app = express();
+
+// Довіра до проксі (для коректного Rate Limiting на хостингу Render)
+app.set('trust proxy', 1);
 
 app.use(helmet({ contentSecurityPolicy: false }));
 
@@ -18,9 +22,20 @@ app.use(
   })
 );
 
+// Збір HTTP-метрик
+app.use((req, res, next) => {
+  metrics.httpRequestsTotal += 1;
+  res.on('finish', () => {
+    if (res.statusCode >= 500) {
+      metrics.httpErrorsTotal += 1;
+    }
+  });
+  next();
+});
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: Number(process.env.RATE_LIMIT) || 100,
+  limit: Number(process.env.RATE_LIMIT) || 200,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test',
@@ -42,7 +57,11 @@ app.use('/api/auth/', authLimiter);
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, { explorer: true }));

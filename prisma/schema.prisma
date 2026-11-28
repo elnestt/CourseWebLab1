@@ -38,6 +38,7 @@ model User {
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   auditLogs           AuditLog[]
+  notifications       Notification[]
 }
 
 model File {
@@ -93,6 +94,8 @@ model AuditLog {
 
   @@index([userId])
   @@index([createdAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action])
 }
 
 model Genre {
@@ -123,6 +126,10 @@ model Game {
   collectionItems CollectionItem[]
 
   @@index([genreId])
+
+  @@index([genreId, releaseYear])
+  @@index([title])
+  @@index([createdAt(sort: Desc)])
 }
 
 model GameLog {
@@ -143,6 +150,9 @@ model GameLog {
   @@unique([userId, gameId])
   @@index([userId])
   @@index([gameId])
+  @@index([userId, status])
+  @@index([gameId, rating])
+  @@index([createdAt(sort: Desc)])
 }
 
 model Review {
@@ -159,8 +169,11 @@ model Review {
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   game             Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  
   @@index([gameId])
+  @@index([gameId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([rating])
 }
 
 model Collection {
@@ -187,4 +200,45 @@ model CollectionItem {
   game         Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
   @@unique([collectionId, gameId])
+}
+
+enum NotificationType {
+  GAME_ADDED
+  REVIEW_POSTED
+  LOG_MILESTONE
+  SYSTEM_ALERT
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model Notification {
+  id        Int                  @id @default(autoincrement())
+  userId    Int
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType     @default(SYSTEM_ALERT)
+  priority  NotificationPriority @default(NORMAL)
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean              @default(false)
+  createdAt DateTime             @default(now())
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@index([priority])
+}
+
+model SocketEvent {
+  id        Int      @id @default(autoincrement())
+  room      String
+  event     String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([room, id])
+  @@index([createdAt])
 }

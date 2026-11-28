@@ -1,77 +1,125 @@
-import {
-  findAllGames,
-  findGameById,
-  createGameRecord,
-  updateGameRecord,
-  deleteGameRecord,
-} from '../models/gameModel.js';
+import { gameModel } from '../models/gameModel.js';
 import { logAudit } from '../utils/audit.js';
+import { prisma } from '../db.js';
+import { emitRealtimeEvent, sendBatchNotifications } from '../services/notificationService.js';
 
-export async function getGames(req, res) {
-  const result = await findAllGames(req.query);
-  res.json(result);
-}
-
-export async function getGameById(req, res) {
-  const game = await findGameById(Number(req.params.id));
-  if (!game) {
-    return res.status(404).json({ error: 'Гру не знайдено' });
+export const getAllGames = async (req, res, next) => {
+  try {
+    const result = await gameModel.findAll(req.query);
+    res.json(result);
+  } catch (err) {
+    next(err);
   }
-  res.json({ data: game });
-}
+};
 
-export async function createGame(req, res) {
-  const game = await createGameRecord(req.body);
+export const getGameById = async (req, res, next) => {
+  try {
+    const game = await gameModel.findById(req.params.id);
+    if (!game) {
+      return res.status(404).json({ error: 'Гру не знайдено' });
+    }
+    res.json({ data: game });
+  } catch (err) {
+    next(err);
+  }
+};
 
-  await logAudit({
-    userId: req.user?.userId,
-    action: 'GAME_CREATED',
-    entity: 'Game',
-    entityId: game.id,
-    details: { title: game.title },
-    req,
-  });
+export const createGame = async (req, res, next) => {
+  try {
+    const game = await gameModel.create(req.body);
+    const io = req.app.get('io');
+    const actorId = req.user?.userId ?? req.user?.id;
 
-  res.status(201).json({ message: 'Гру успішно додано', data: game });
-}
+    await logAudit({
+      userId: actorId,
+      action: 'GAME_CREATED',
+      entity: 'Game',
+      entityId: game.id,
+      details: { title: game.title },
+      req,
+    });
 
-export async function updateGame(req, res) {
-  const id = Number(req.params.id);
-  const existing = await findGameById(id);
-  if (!existing) {
-    return res.status(404).json({ error: 'Гру не знайдено' });
+    // Оновлення в реальному часі для всіх, хто переглядає каталог
+    await emitRealtimeEvent(io, 'catalog', 'game:created', { game });
+
+    // Групове фонове сповіщення користувачів про нову гру (пропускаємо в test-режимі, щоб не смітити тестовими даними)
+    if (process.env.NODE_ENV !== 'test') {
+      const users = await prisma.user.findMany({
+        where: actorId ? { id: { not: actorId } } : undefined,
+        select: { id: true },
+        take: 100,
+      });
+
+      sendBatchNotifications(
+        io,
+        users.map((u) => u.id),
+        {
+          type: 'GAME_ADDED',
+          priority: 'NORMAL',
+          title: 'Нова гра в каталозі',
+          message: `Додано гру «${game.title}» (${game.developer})`,
+          data: { gameId: game.id, slug: game.slug },
+        }
+      );
+    }
+
+    res.status(201).json({ data: game });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateGame = async (req, res, next) => {
+  try {
+    const game = await gameModel.update(req.params.id, req.body);
+    const io = req.app.get('io');
+    const actorId = req.user?.userId ?? req.user?.id;
+
+    await logAudit({
+      userId: actorId,
+      action: 'GAME_UPDATED',
+      entity: 'Game',
+      entityId: game.id,
+      details: req.body,
+      req,
+    });
+
+    await Promise.all([
+      emitRealtimeEvent(io, 'catalog', 'game:updated', { game }),
+      emitRealtimeEvent(io, `game:${game.id}`, 'game:updated', { game }),
+    ]);
+
+    res.json({ data: game });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteGame = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    await gameModel.delete(id);
+    const io = req.app.get('io');
+    const actorId = req.user?.userId ?? req.user?.id;
+
+    await logAudit({
+      userId: actorId,
+      action: 'GAME_DELETED',
+      entity: 'Game',
+      entityId: id,
+      req,
+    });
+
+    await Promise.all([
+      emitRealtimeEvent(io, 'catalog', 'game:deleted', { id }),
+      emitRealtimeEvent(io, `game:${id}`, 'game:deleted', { id }),
+    ]);
+
+    res.json({ message: 'Гру видалено' });
+  } catch (err) {
+    next(err);
   }
 
-  const game = await updateGameRecord(id, req.body);
+};
 
-  await logAudit({
-    userId: req.user?.userId,
-    action: 'GAME_UPDATED',
-    entity: 'Game',
-    entityId: game.id,
-    req,
-  });
-
-  res.json({ message: 'Дані гри оновлено', data: game });
-}
-
-export async function deleteGame(req, res) {
-  const id = Number(req.params.id);
-  const existing = await findGameById(id);
-  if (!existing) {
-    return res.status(404).json({ error: 'Гру не знайдено' });
-  }
-
-  await deleteGameRecord(id);
-
-  await logAudit({
-    userId: req.user?.userId,
-    action: 'GAME_DELETED',
-    entity: 'Game',
-    entityId: id,
-    details: { title: existing.title },
-    req,
-  });
-
-  res.status(204).end();
-}
+export const getGames = getAllGames;
